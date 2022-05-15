@@ -1,22 +1,23 @@
 const siteMetadata = {
-  title: 'Next.js Starter Blog',
-  author: 'Tails Azimuth',
-  headerTitle: 'TailwindBlog',
-  description: 'A blog created with Next.js and Tailwind.css',
-  language: 'en-us',
+  title: "Aloha's Blog",
+  author: 'Aloha',
+  headerTitle: "Aloha's Blog",
+  description: '你做三四月的事，在八九月自有答案',
+  language: 'zh-CN',
   theme: 'system', // system, dark or light
-  siteUrl: 'https://tailwind-nextjs-starter-blog.vercel.app',
-  siteRepo: 'https://github.com/timlrx/tailwind-nextjs-starter-blog',
+  siteUrl: 'https://blog-a1oha.vercel.app/',
+  siteRepo: 'https://github.com/a1ooha/blog',
   siteLogo: '/static/images/logo.png',
-  image: '/static/images/avatar.png',
-  socialBanner: '/static/images/twitter-card.png',
-  email: 'address@yoursite.com',
-  github: 'https://github.com',
-  twitter: 'https://twitter.com/Twitter',
-  facebook: 'https://facebook.com',
-  youtube: 'https://youtube.com',
-  linkedin: 'https://www.linkedin.com',
-  locale: 'en-US',
+  image: '/static/images/logo.png',
+  socialBanner: '/static/images/logo.png',
+  email: '946947760@qq.com',
+  github: 'https://github.com/a1ooha',
+  rss: '/feed.xml',
+  twitter: '',
+  facebook: '',
+  youtube: '',
+  linkedin: '',
+  locale: 'zh-CN',
   analytics: {
     // If you want to use an analytics provider you have to add it to the
     // content security policy in the `next.config.js` file.
@@ -29,7 +30,7 @@ const siteMetadata = {
   newsletter: {
     // supports mailchimp, buttondown, convertkit, klaviyo, revue
     // Please add your .env file and modify it according to your selection
-    provider: 'buttondown',
+    provider: '',
   },
   comment: {
     // If you want to use an analytics provider you have to add it to the
