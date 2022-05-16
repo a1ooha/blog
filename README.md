@@ -2,4 +2,4 @@
 
 # Aloha's Blog
 
-[This blog](https://blog-a1oha.vercel.app/) is hosted on [Vercel](https://vercel.com/), built with [Next.js](https://nextjs.org/) ([Preact](https://preactjs.com/) for production) and [Tailwind CSS](https://tailwindcss.com/) using [Tailwind Nextjs Starter Blog](https://github.com/timlrx/tailwind-nextjs-starter-blog).
+[This blog](https://a1oha.vercel.app/) is hosted on [Vercel](https://vercel.com/), built with [Next.js](https://nextjs.org/) ([Preact](https://preactjs.com/) for production) and [Tailwind CSS](https://tailwindcss.com/) using [Tailwind Nextjs Starter Blog](https://github.com/timlrx/tailwind-nextjs-starter-blog).
