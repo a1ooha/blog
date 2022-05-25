@@ -1,7 +1,139 @@
 ---
 title: 使用 Lerna 在 Gitlab 中实现自动化管理
 date: 2022-05-16
-draft: true
+draft: false
 tags: ['Lerna', 'Gitlab', 'Monorepo', 'CI/CD']
-summary: 利用 Gitlab 的 CI/CD 配合 Lerna 实现自动生成 CHANGELOG、更新依赖以及发布版本
+summary: 利用 Gitlab 的 CI/CD 配合 Lerna 实现自动生成 CHANGELOG、更新相关依赖以及发布版本
 ---
+
+## 背景
+
+最近在做抽库相关的工作，为了方便管理，选用了 Monorepo 的方式进行组织，技术上使用了 [Lerna](https://lerna.js.org/) 和 [Yarn](https://classic.yarnpkg.com/lang/en/)，`Lerna` 来处理发布问题，`Yarn` 来处理依赖问题。
+
+Github 提供了大量的 Actions，可以很方便地完成发版流程自动化。但在 Gitlab 中，我们需要自己编排 CI/CD 来实现一些自动化的功能。
+
+原本发包都是在本地手动发版或者在代码合并进入 `master` 后（包含 CHANGELOG）执行 CI/CD 半自动发版。这次抽库想完善一下基础设施，让发包自动化。开发只需关注代码本身以及做好 commit（会根据 commit 信息生成 CHANGELOG），剩下的都有工具自动完成。
+
+## 实现过程
+
+一开始期望的流程是这样的：
+
+1. 编写功能代码
+2. 提交 **Merge Request** 进行 Code Review
+3. 合并到 `master` 触发 CI/CD 自动生成 CHANGELOG、更新相关依赖以及发布版本
+
+部分 `package.json` 内容如下：
+
+```json:package.json {6-10}
+{
+  "name": "example-libs",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "bump_version": "yarn run build && lerna version --conventional-commits --create-release gitlab --yes",
+    "release": "yarn run build && lerna publish from-git --yes && yarn run deploy",
+    "link-all": "yarn run build && yarn unlink-all; lerna exec --parallel yarn link",
+    "unlink-all": "lerna exec --no-bail --parallel yarn unlink"
+  }
+}
+```
+
+- `bump_version`：自动根据 commit 更新版本号并生成 CHANGELOG，同时会在 Gitlab 中创建一个 release
+- `release`：发布当前 commit 打 tag 的包（就是 `bump_version` 生成的）
+- `link-all` 和 `unlink-all`：方便本地 link 调试的脚本
+
+因为 `bump_version` 在当前分支 commit 并 push 代码，所以导致了以下三个问题：
+
+1. 需要打开 `master` 分支 **Allowed to push** 的设置
+2. CI/CD 环境没有 push 代码的权限
+3. 自动提交的 commit 也会触发 CI/CD 导致死循环
+
+### 问题一
+
+在多人协作的环境下，代码都需要提交先 **Merge Request**，Code Review 没问题后才能合入 `master`。所以，允许直接 push 不太合适，容易产生误操作。同时，万一自动化脚本出问题了也不容易及时发现处理。
+
+因此，改进后的流程如下：
+
+1. 编写功能代码
+2. 提交 **Merge Request** 进行 Code Review
+3. Code Review 通过后在当前分支触发 CI/CD 自动生成 CHANGELOG 并更新相关依赖
+4. 检查自动生成的内容是否正确并合入 `master`
+5. 在 `master` 自动触发 CI/CD 发布版本
+
+这样一来，所有内容都在其他分支上完成。确认无误后，只需合入 `master`，CI/CD 便能根据最新内容完成发版的操作了。
+
+### 问题二
+
+Gitlab 为了 CI/CD 的执行速度，默认使用的是 `git fetch` 的方式获取代码，没有 `origin` 信息。同时，CI/CD 的环境也没有登录账号。这两点导致了无法在 CI/CD 环境中 push 代码，好在 Gitlab 提供了 token 的方式进行认证，实现方式如下：
+
+```yaml:.gitlab-ci.yml {14}
+stages:
+  - merge_check
+  - bump_version
+  - release
+
+bump_version:
+  stage: bump_version
+  image: node:16
+  before_script:
+    - yarn install
+  only:
+    - merge_requests
+  script:
+    - git config --global credential.helper store
+    - git remote set-url origin "https://gitlab-ci-token:$GL_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git"
+    - git fetch origin
+    - git checkout "$CI_COMMIT_REF_NAME"
+    - git config --global user.email "bot@example.com"
+    - git config --global user.name "RELEASE BOT"
+    - yarn bump_version
+```
+
+重点在于上面被高亮的这行代码，其中 `$GL_TOKEN` 是个人生成的 `Access Tokens` 并需要配置在 CI/CD 环境变量当中。其余的环境变量都是内置的，用于指定项目地址以及分支名。
+
+### 问题三
+
+CI/CD 中 `merge_check` 是用来检测 Code Review 的点赞数的，但点赞数达标后该 Job 才会成功。当 `merge_check` 通过后将自动执行 `bump_version`，而 `bump_version` 会在当前分支产生新的 commit，就又会触发新的 CI/CD 导致无限循环。
+
+解决这个问题的方式很简单，只需要 CI/CD 忽略 `bump_version` 的 commit 就行。
+
+```yaml:.gitlab-ci.yml {13-15}
+stages:
+  - merge_check
+  - bump_version
+  - release
+
+bump_version:
+  stage: bump_version
+  image: node:16
+  before_script:
+    - yarn install
+  only:
+    - merge_requests
+  except:
+    variables:
+      - $CI_COMMIT_MESSAGE =~ /^chore:\spublish/
+  script:
+    - git config --global credential.helper store
+    - git remote set-url origin "https://gitlab-ci-token:$GL_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git"
+    - git fetch origin
+    - git checkout "$CI_COMMIT_REF_NAME"
+    - git config --global user.email "bot@example.com"
+    - git config --global user.name "RELEASE BOT"
+    - yarn bump_version
+```
+
+因为公司 Gitlab 版本较低，所以这里通过匹配 commit message 的方式实现的。在 Gitlab 13.11 及以后，支持了环境变量 `$CI_COMMIT_AUTHOR`，可以通过 commit 提交的作者进行匹配。
+
+## 总结
+
+至此，整套流程已经跑通了。我们变可以专注于写代码，只需维护好 commit 信息，剩下繁琐重复的一切就交给 CI/CD 吧！从此我再也不会忘记更新 CHANGELOG 和忘记发布版本了。😛
+
+当然，这套流程仍然有很多需要改进的地方，比如：
+
+- 缓存 `node_modules` 目录
+- 复用 `build` 后的产物
+- 支持 `canary` 版本发布
+- ......
+
+有兴趣的同学可以自己研究一下如何实现。
